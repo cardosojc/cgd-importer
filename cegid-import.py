@@ -17,6 +17,7 @@ import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
 import paramiko
 from paramiko import SSHClient, SFTPClient
+import hashlib
 
 # Configure logging
 logging.basicConfig(
@@ -152,6 +153,21 @@ class SFTPManager:
             logger.error(f"Failed to download {remote_filename}: {e}")
             return None
 
+    def get_file_hash(self, filename: str) -> Optional[str]:
+        """Calculate SHA256 hash of remote file"""
+        try:
+            with self.sftp.open(filename, 'rb') as remote_file:
+                hash_sha256 = hashlib.sha256()
+                while True:
+                    chunk = remote_file.read(8192)
+                    if not chunk:
+                        break
+                    hash_sha256.update(chunk)
+                return hash_sha256.hexdigest()
+        except Exception as e:
+            logger.error(f"Failed to calculate hash for {filename}: {e}")
+            return None
+
     def delete_file(self, filename: str) -> bool:
         """Delete file from SFTP server"""
         try:
@@ -243,6 +259,22 @@ class S3Manager:
             else:
                 logger.error(f"Error checking S3 object existence: {e}")
                 return False
+
+
+def calculate_local_file_hash(file_path: str) -> Optional[str]:
+    """Calculate SHA256 hash of local file"""
+    try:
+        hash_sha256 = hashlib.sha256()
+        with open(file_path, 'rb') as f:
+            while True:
+                chunk = f.read(8192)
+                if not chunk:
+                    break
+                hash_sha256.update(chunk)
+        return hash_sha256.hexdigest()
+    except Exception as e:
+        logger.error(f"Failed to calculate hash for local file {file_path}: {e}")
+        return None
 
 
 def read_csv_filenames(csv_path: str, filename_column: str = 'filename') -> Optional[List[str]]:
@@ -361,9 +393,25 @@ def process_files(sftp_manager: SFTPManager, s3_manager: Optional[S3Manager],
             # Delete from SFTP if download/upload successful and deletion enabled
             sftp_delete_success = True
             if delete_from_sftp:
-                sftp_delete_success = sftp_manager.delete_file(filename)
-                if not sftp_delete_success:
+                # Verify file integrity by comparing hashes before deletion
+                logger.info(f"Verifying file integrity for {filename} before deletion")
+                
+                local_hash = calculate_local_file_hash(file_path)
+                remote_hash = sftp_manager.get_file_hash(filename)
+                
+                if local_hash and remote_hash and local_hash == remote_hash:
+                    logger.info(f"Hash verification successful for {filename} - proceeding with deletion")
+                    sftp_delete_success = sftp_manager.delete_file(filename)
+                    if not sftp_delete_success:
+                        results['sftp_delete_failed'].append(filename)
+                elif local_hash and remote_hash:
+                    logger.error(f"Hash mismatch for {filename}: local={local_hash[:8]}..., remote={remote_hash[:8]}... - skipping deletion")
                     results['sftp_delete_failed'].append(filename)
+                    sftp_delete_success = False
+                else:
+                    logger.error(f"Could not calculate hash for {filename} - skipping deletion for safety")
+                    results['sftp_delete_failed'].append(filename)
+                    sftp_delete_success = False
 
             # Mark as success
             results['success'].append(filename)
