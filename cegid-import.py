@@ -97,12 +97,28 @@ class SFTPManager:
             # Create local directory if it doesn't exist
             local_filepath.parent.mkdir(parents=True, exist_ok=True)
 
-            self.sftp.get(remote_filename, str(local_filepath))
+            # Get file size for progress tracking
+            try:
+                file_stat = self.sftp.stat(remote_filename)
+                file_size = file_stat.st_size
+            except:
+                file_size = 0
 
+            # Progress callback
+            def progress_callback(transferred, total):
+                if total > 0:
+                    percentage = (transferred / total) * 100
+                    print(f"\r{remote_filename}: {percentage:.1f}% ({transferred}/{total} bytes)", end='', flush=True)
+
+            self.sftp.get(remote_filename, str(local_filepath), callback=progress_callback)
+            
+            # New line after progress
+            print()
             logger.info(f"Downloaded: {remote_filename} -> {local_filepath}")
             return str(local_filepath)
 
         except Exception as e:
+            print()  # Ensure we're on a new line after any progress output
             logger.error(f"Failed to download {remote_filename}: {e}")
             return None
 
@@ -111,12 +127,28 @@ class SFTPManager:
         try:
             temp_filepath = os.path.join(temp_dir, remote_filename)
 
-            self.sftp.get(remote_filename, temp_filepath)
+            # Get file size for progress tracking
+            try:
+                file_stat = self.sftp.stat(remote_filename)
+                file_size = file_stat.st_size
+            except:
+                file_size = 0
 
+            # Progress callback
+            def progress_callback(transferred, total):
+                if total > 0:
+                    percentage = (transferred / total) * 100
+                    print(f"\r{remote_filename}: {percentage:.1f}% ({transferred}/{total} bytes)", end='', flush=True)
+
+            self.sftp.get(remote_filename, temp_filepath, callback=progress_callback)
+            
+            # New line after progress
+            print()
             logger.info(f"Downloaded to temp: {remote_filename}")
             return temp_filepath
 
         except Exception as e:
+            print()  # Ensure we're on a new line after any progress output
             logger.error(f"Failed to download {remote_filename}: {e}")
             return None
 
