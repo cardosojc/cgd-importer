@@ -308,7 +308,8 @@ def read_csv_filenames(csv_path: str, filename_column: str = 'filename') -> Opti
 def process_files(sftp_manager: SFTPManager, s3_manager: Optional[S3Manager],
                   filenames: List[str], remote_sftp_path: str = "/",
                   local_download_path: str = "./downloads", s3_prefix: str = "",
-                  delete_from_sftp: bool = True, overwrite_s3: bool = False) -> dict:
+                  delete_from_sftp: bool = True, overwrite_s3: bool = False,
+                  verify_hash_before_delete: bool = True) -> dict:
     """Process files: SFTP download -> optional S3 upload -> cleanup"""
 
     results = {
@@ -369,25 +370,32 @@ def process_files(sftp_manager: SFTPManager, s3_manager: Optional[S3Manager],
             # Delete from SFTP if download successful and deletion enabled
             sftp_delete_success = True
             if delete_from_sftp:
-                # Verify file integrity by comparing hashes before deletion
-                logger.info(f"Verifying file integrity for {filename} before deletion")
-                
-                local_hash = calculate_local_file_hash(file_path)
-                remote_hash = sftp_manager.get_file_hash(filename)
-                
-                if local_hash and remote_hash and local_hash == remote_hash:
-                    logger.info(f"Hash verification successful for {filename} - proceeding with deletion")
+                if verify_hash_before_delete:
+                    # Verify file integrity by comparing hashes before deletion
+                    logger.info(f"Verifying file integrity for {filename} before deletion")
+                    
+                    local_hash = calculate_local_file_hash(file_path)
+                    remote_hash = sftp_manager.get_file_hash(filename)
+                    
+                    if local_hash and remote_hash and local_hash == remote_hash:
+                        logger.info(f"Hash verification successful for {filename} - proceeding with deletion")
+                        sftp_delete_success = sftp_manager.delete_file(filename)
+                        if not sftp_delete_success:
+                            results['sftp_delete_failed'].append(filename)
+                    elif local_hash and remote_hash:
+                        logger.error(f"Hash mismatch for {filename}: local={local_hash[:8]}..., remote={remote_hash[:8]}... - skipping deletion")
+                        results['sftp_delete_failed'].append(filename)
+                        sftp_delete_success = False
+                    else:
+                        logger.error(f"Could not calculate hash for {filename} - skipping deletion for safety")
+                        results['sftp_delete_failed'].append(filename)
+                        sftp_delete_success = False
+                else:
+                    # Skip hash verification and delete directly
+                    logger.info(f"Skipping hash verification for {filename} - deleting directly")
                     sftp_delete_success = sftp_manager.delete_file(filename)
                     if not sftp_delete_success:
                         results['sftp_delete_failed'].append(filename)
-                elif local_hash and remote_hash:
-                    logger.error(f"Hash mismatch for {filename}: local={local_hash[:8]}..., remote={remote_hash[:8]}... - skipping deletion")
-                    results['sftp_delete_failed'].append(filename)
-                    sftp_delete_success = False
-                else:
-                    logger.error(f"Could not calculate hash for {filename} - skipping deletion for safety")
-                    results['sftp_delete_failed'].append(filename)
-                    sftp_delete_success = False
 
             # Handle S3 upload or mark local download as success
             if use_s3:
@@ -494,6 +502,8 @@ def main():
                         help='CSV column name containing filenames (default: filename)')
     parser.add_argument('--no-delete', action='store_true',
                         help='Do not delete files from SFTP after successful download/transfer')
+    parser.add_argument('--no-hash-verify', action='store_true',
+                        help='Skip hash verification before deleting files from SFTP (faster but less safe)')
 
     args = parser.parse_args()
 
@@ -558,7 +568,8 @@ def main():
             local_download_path=args.local_path,
             s3_prefix=args.s3_prefix,
             delete_from_sftp=not args.no_delete,
-            overwrite_s3=args.overwrite_s3
+            overwrite_s3=args.overwrite_s3,
+            verify_hash_before_delete=not args.no_hash_verify
         )
 
         # Print summary

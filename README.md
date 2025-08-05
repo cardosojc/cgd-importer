@@ -102,6 +102,7 @@ python ftp_script.py filenames.csv \
 |----------|---------|-------------|
 | `--filename-column` | `"filename"` | CSV column name containing filenames |
 | `--no-delete` | False | Don't delete files from FTP after download |
+| `--no-hash-verify` | False | Skip hash verification before deleting files from FTP (faster but less safe) |
 
 ## CSV File Format
 
@@ -152,9 +153,18 @@ python ftp_script.py files.csv \
   --no-delete
 ```
 
+**4. Download with fast deletion (skip hash verification):**
+```bash
+python ftp_script.py files.csv \
+  --ftp-host ftp.example.com \
+  --ftp-user myuser \
+  --ftp-password mypass \
+  --no-hash-verify
+```
+
 ### S3 Examples
 
-**4. Basic FTP to S3 transfer:**
+**5. Basic FTP to S3 transfer:**
 ```bash
 python ftp_script.py files.csv \
   --ftp-host ftp.example.com \
@@ -163,7 +173,7 @@ python ftp_script.py files.csv \
   --s3-bucket my-data-bucket
 ```
 
-**5. S3 with folder organization:**
+**6. S3 with folder organization:**
 ```bash
 python ftp_script.py files.csv \
   --ftp-host ftp.example.com \
@@ -173,7 +183,7 @@ python ftp_script.py files.csv \
   --s3-prefix "incoming/$(date +%Y/%m/%d)"
 ```
 
-**6. S3 with overwrite enabled:**
+**7. S3 with overwrite enabled:**
 ```bash
 python ftp_script.py files.csv \
   --ftp-host ftp.example.com \
@@ -183,9 +193,19 @@ python ftp_script.py files.csv \
   --overwrite-s3
 ```
 
+**8. S3 transfer with fast deletion (skip hash verification):**
+```bash
+python ftp_script.py files.csv \
+  --ftp-host ftp.example.com \
+  --ftp-user myuser \
+  --ftp-password mypass \
+  --s3-bucket my-data-bucket \
+  --no-hash-verify
+```
+
 ### Advanced Examples
 
-**7. Custom FTP port and remote directory:**
+**9. Custom FTP port and remote directory:**
 ```bash
 python ftp_script.py files.csv \
   --ftp-host ftp.example.com \
@@ -197,7 +217,7 @@ python ftp_script.py files.csv \
   --s3-prefix "external-data/"
 ```
 
-**8. Custom CSV column name:**
+**10. Custom CSV column name:**
 ```bash
 python ftp_script.py data_files.csv \
   --ftp-host ftp.example.com \
@@ -207,7 +227,7 @@ python ftp_script.py data_files.csv \
   --s3-bucket my-bucket
 ```
 
-**9. AWS CloudShell with specific region:**
+**11. AWS CloudShell with specific region:**
 ```bash
 python ftp_script.py files.csv \
   --ftp-host ftp.example.com \
@@ -218,7 +238,7 @@ python ftp_script.py files.csv \
   --s3-prefix "data/$(date +%Y-%m-%d)/"
 ```
 
-**10. Production ETL pipeline example:**
+**12. Production ETL pipeline example:**
 ```bash
 python ftp_script.py daily_files.csv \
   --ftp-host secure-ftp.vendor.com \
