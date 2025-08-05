@@ -366,31 +366,7 @@ def process_files(sftp_manager: SFTPManager, s3_manager: Optional[S3Manager],
                 results['sftp_download_failed'].append(filename)
                 continue
 
-            # Handle S3 upload or mark local download as success
-            if use_s3:
-                try:
-                    # Upload to S3
-                    if s3_manager.upload_file(file_path, s3_key):
-                        upload_success = True
-                    else:
-                        results['s3_upload_failed'].append(filename)
-                        upload_success = False
-
-                    # Clean up temp file
-                    try:
-                        os.remove(file_path)
-                    except:
-                        pass
-
-                except Exception as e:
-                    logger.error(f"Error during S3 upload process for {filename}: {e}")
-                    results['s3_upload_failed'].append(filename)
-                    upload_success = False
-
-                if not upload_success:
-                    continue
-
-            # Delete from SFTP if download/upload successful and deletion enabled
+            # Delete from SFTP if download successful and deletion enabled
             sftp_delete_success = True
             if delete_from_sftp:
                 # Verify file integrity by comparing hashes before deletion
@@ -412,6 +388,30 @@ def process_files(sftp_manager: SFTPManager, s3_manager: Optional[S3Manager],
                     logger.error(f"Could not calculate hash for {filename} - skipping deletion for safety")
                     results['sftp_delete_failed'].append(filename)
                     sftp_delete_success = False
+
+            # Handle S3 upload or mark local download as success
+            if use_s3:
+                try:
+                    # Upload to S3
+                    if s3_manager.upload_file(file_path, s3_key):
+                        upload_success = True
+                    else:
+                        results['s3_upload_failed'].append(filename)
+                        upload_success = False
+
+                    # Clean up temp file after hash verification and SFTP deletion
+                    try:
+                        os.remove(file_path)
+                    except:
+                        pass
+
+                except Exception as e:
+                    logger.error(f"Error during S3 upload process for {filename}: {e}")
+                    results['s3_upload_failed'].append(filename)
+                    upload_success = False
+
+                if not upload_success:
+                    continue
 
             # Mark as success
             results['success'].append(filename)
